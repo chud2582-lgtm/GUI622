@@ -19,6 +19,7 @@
 #include <QTimer>
 #include <QVector3D>
 
+
 #include <array>
 
 #include "cpp/parameter/nrc_define.h"
