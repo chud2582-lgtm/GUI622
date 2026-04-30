@@ -25,6 +25,7 @@
 #include "cpp/parameter/nrc_interface_parameter.h"
 
 class RobotPreviewWidget;
+class AutoCalibrationWidget;
 
 class MainWindow : public QMainWindow
 {
@@ -68,6 +69,10 @@ private slots:
     void onSetDigitalOutput();
     void onRefreshIO();
 
+    void onSetGlobalVariant();
+    void onGetGlobalVariant();
+    void onToggleWindGrinder();
+
     void onTimerUpdate();
     void onPreviewFrame();
     void onClearPreviewTrace();
@@ -90,6 +95,12 @@ private:
     QWidget* createMotionPanel();
     QWidget* createJobPanel();
     QWidget* createIOPanel();
+    QWidget* createGlobalVariantPanel();
+    QWidget* createAutoCalibrationPanel();
+    void notifyAutoCalibConnection();
+    void notifyAutoCalibPose();
+    void applyGlobalVariantInputType();
+    void refreshGlobalVariantModeLabel();
 
     QPushButton* createStyledButton(const QString& text, const QString& styleClass = QString());
     QGroupBox* createStyledGroup(const QString& title);
@@ -174,6 +185,19 @@ private:
     QPushButton* m_ioRefreshBtn = nullptr;
     QTableWidget* m_diTable = nullptr;
     QTableWidget* m_doTable = nullptr;
+
+    QLineEdit* m_globalVarNameEdit = nullptr;
+    QComboBox* m_globalVarPresetCombo = nullptr;
+    QDoubleSpinBox* m_globalVarValueSpin = nullptr;
+    QLabel* m_globalVarTypeLabel = nullptr;
+    QLabel* m_globalVarModeLabel = nullptr;
+    QPushButton* m_globalVarSetBtn = nullptr;
+    QPushButton* m_globalVarGetBtn = nullptr;
+    QLabel* m_globalVarResultLabel = nullptr;
+    QPushButton* m_windGrinderBtn = nullptr;
+    bool m_windGrinderOn = false;
+
+    AutoCalibrationWidget* m_autoCalib = nullptr;
 
     QLabel* m_robotRunStateLabel = nullptr;
     QLabel* m_robotTypeLabel = nullptr;

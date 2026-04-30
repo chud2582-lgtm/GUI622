@@ -106,7 +106,7 @@ QVector<QVector3D> RobotPreviewWidget::buildRobotPoints(const std::array<double,
     const float wristPitch = elbow + static_cast<float>(jointAnglesDeg[3]) * 0.85f;
     const float toolPitch = wristPitch + static_cast<float>(jointAnglesDeg[5]) * 0.55f - 18.0f;
     const float wristRoll = static_cast<float>(jointAnglesDeg[4]);
-    const float toolRoll = static_cast<float>(jointAnglesDeg[6]);
+    const float toolRoll = 0.0f;
 
     current += radialDirection(yaw, shoulder) * kUpperArm;
     points.push_back(current);
@@ -167,7 +167,7 @@ std::array<double, 7> RobotPreviewWidget::approximateJointsFromTcp(const std::ar
     joints[3] = -(joints[1] + joints[2]) * 0.70 + cartesianPose[4] * 0.18;
     joints[4] = cartesianPose[3] * 0.20;
     joints[5] = -18.0 + cartesianPose[5] * 0.15;
-    joints[6] = cartesianPose[6];
+    joints[6] = 0.0;
     return joints;
 }
 

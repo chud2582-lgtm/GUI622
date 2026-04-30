@@ -16,11 +16,24 @@ set(SOURCES
     mainwindow.h
     robotpreviewwidget.cpp
     robotpreviewwidget.h
+    autocalibrationwidget.cpp
+    autocalibrationwidget.h
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
+
+# Force UTF-8 source decoding so Chinese QStringLiteral text is rendered correctly
+# in the UI and log area after rebuilding.
+if(MSVC)
+    target_compile_options(${PROJECT_NAME} PRIVATE /utf-8)
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(${PROJECT_NAME} PRIVATE
+        -finput-charset=UTF-8
+        -fexec-charset=UTF-8
+    )
+endif()
 
 set(ROBOT_SDK_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/robot_sdk")
 set(ROBOT_SDK_CPP_ROOT "${ROBOT_SDK_ROOT}/cpp")
@@ -110,3 +123,12 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
     VERBATIM
 )
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/calib_scripts")
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/calib_scripts"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/calib_scripts"
+        VERBATIM
+    )
+endif()
