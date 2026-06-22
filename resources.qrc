@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/presets">
+        <file alias="编程点位表.txt">global_var_presets.txt</file>
+    </qresource>
+</RCC>
