@@ -390,7 +390,7 @@ QString runStateText(int state)
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
-    setWindowTitle(QStringLiteral("机器人控制界面"));
+    setWindowTitle(QStringLiteral("打磨机器人控制软件"));
 
     if (QScreen *screen = QApplication::primaryScreen()) {
         const QRect screenRect = screen->availableGeometry();
