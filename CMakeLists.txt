@@ -7,22 +7,26 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Network)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Network)
 
 set(SOURCES
     main.cpp
     mainwindow.cpp
     mainwindow.h
-    robotpreviewwidget.cpp
-    robotpreviewwidget.h
-    autocalibrationwidget.cpp
-    autocalibrationwidget.h
+    workpieceselectionwidget.cpp
+    workpieceselectionwidget.h
+    robot_sdk/cpp/robot_adapter.cpp
+    robot_sdk/cpp/robot_arm_actions.cpp
+    robot_sdk/cpp/huichuan_arm_actions.cpp
+    robot_sdk/cpp/yinglian_arm_actions.cpp
+    robot_sdk/cpp/huichuan_backend.cpp
+    robot_sdk/cpp/yinglian_backend.cpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
 
-target_link_libraries(${PROJECT_NAME} PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
+target_link_libraries(${PROJECT_NAME} PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Network)
 
 # Force UTF-8 source decoding so Chinese QStringLiteral text is rendered correctly
 # in the UI and log area after rebuilding.
@@ -36,99 +40,119 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 set(ROBOT_SDK_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/robot_sdk")
-set(ROBOT_SDK_CPP_ROOT "${ROBOT_SDK_ROOT}/cpp")
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     "${ROBOT_SDK_ROOT}"
-    "${ROBOT_SDK_CPP_ROOT}"
-    "${ROBOT_SDK_CPP_ROOT}/interface"
-    "${ROBOT_SDK_CPP_ROOT}/parameter"
+    "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
 if(NOT EXISTS "${ROBOT_SDK_ROOT}")
     message(FATAL_ERROR "robot_sdk directory not found: ${ROBOT_SDK_ROOT}")
 endif()
 
-add_library(robot_sdk SHARED IMPORTED GLOBAL)
-
 if(WIN32)
-    if(NOT MINGW)
-        message(FATAL_ERROR "The Windows SDK in robot_sdk/windows only provides MinGW import libraries. Please configure CMake with a MinGW toolchain.")
+    if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+        message(FATAL_ERROR "The bundled robot SDKs only support 64-bit Windows builds.")
     endif()
 
-    set(ROBOT_SDK_RELEASE_DIR "${ROBOT_SDK_ROOT}/windows/temp_win_mingw64_v2.0.4")
-    set(ROBOT_SDK_DEBUG_DIR "${ROBOT_SDK_ROOT}/windows/temp_win_mingw64_debug_v2.0.4")
+    set(HUICHUAN_SDK_WIN_DIR "${ROBOT_SDK_ROOT}/huichuan/x64")
+    set(HUICHUAN_SDK_IMPORT_LIB "${HUICHUAN_SDK_WIN_DIR}/IMC100API.lib")
+    set(HUICHUAN_SDK_RUNTIME "${HUICHUAN_SDK_WIN_DIR}/IMC100API.dll")
+    if(NOT EXISTS "${HUICHUAN_SDK_IMPORT_LIB}")
+        message(FATAL_ERROR "Required Huichuan SDK import library not found: ${HUICHUAN_SDK_IMPORT_LIB}")
+    endif()
+    if(NOT EXISTS "${HUICHUAN_SDK_RUNTIME}")
+        message(FATAL_ERROR "Required Huichuan SDK file not found: ${HUICHUAN_SDK_RUNTIME}")
+    endif()
 
-    set(ROBOT_SDK_RELEASE_IMPLIB "${ROBOT_SDK_RELEASE_DIR}/libnrc_host.dll.a")
-    set(ROBOT_SDK_RELEASE_DLL "${ROBOT_SDK_RELEASE_DIR}/nrc_host.dll")
-    set(ROBOT_SDK_DEBUG_IMPLIB "${ROBOT_SDK_DEBUG_DIR}/libnrc_host.dll.a")
-    set(ROBOT_SDK_DEBUG_DLL "${ROBOT_SDK_DEBUG_DIR}/nrc_host.dll")
-
-    foreach(required_file
-            "${ROBOT_SDK_RELEASE_IMPLIB}"
-            "${ROBOT_SDK_RELEASE_DLL}"
-            "${ROBOT_SDK_DEBUG_IMPLIB}"
-            "${ROBOT_SDK_DEBUG_DLL}")
-        if(NOT EXISTS "${required_file}")
-            message(FATAL_ERROR "Required Windows SDK file not found: ${required_file}")
-        endif()
-    endforeach()
-
-    set_target_properties(robot_sdk PROPERTIES
-        IMPORTED_CONFIGURATIONS "Debug;Release"
-        IMPORTED_IMPLIB_DEBUG "${ROBOT_SDK_DEBUG_IMPLIB}"
-        IMPORTED_LOCATION_DEBUG "${ROBOT_SDK_DEBUG_DLL}"
-        IMPORTED_IMPLIB_RELEASE "${ROBOT_SDK_RELEASE_IMPLIB}"
-        IMPORTED_LOCATION_RELEASE "${ROBOT_SDK_RELEASE_DLL}"
-        MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release
-        MAP_IMPORTED_CONFIG_MINSIZEREL Release
-    )
-
-    set(ROBOT_SDK_RUNTIME "$<IF:$<CONFIG:Debug>,${ROBOT_SDK_DEBUG_DLL},${ROBOT_SDK_RELEASE_DLL}>")
-elseif(UNIX)
-    if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
-        set(ROBOT_SDK_LINUX_DIR "${ROBOT_SDK_ROOT}/linux/arm64")
-    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64)$")
-        if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9)
-            set(ROBOT_SDK_LINUX_DIR "${ROBOT_SDK_ROOT}/linux/linux_gcc-4_x64_v2.0.4")
-        else()
-            set(ROBOT_SDK_LINUX_DIR "${ROBOT_SDK_ROOT}/linux/linux_gcc-9_x64_v2.0.4")
-        endif()
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        set(YINGLIAN_SDK_WIN_DIR "${ROBOT_SDK_ROOT}/yinglian/windows/temp_win_mingw64_debug_v2.0.4")
     else()
-        message(FATAL_ERROR "Unsupported Linux architecture for robot SDK: ${CMAKE_SYSTEM_PROCESSOR}")
+        set(YINGLIAN_SDK_WIN_DIR "${ROBOT_SDK_ROOT}/yinglian/windows/temp_win_mingw64_v2.0.4")
+    endif()
+    set(YINGLIAN_SDK_RUNTIME "${YINGLIAN_SDK_WIN_DIR}/nrc_host.dll")
+    set(YINGLIAN_SDK_IMPORT_LIB "${YINGLIAN_SDK_WIN_DIR}/libnrc_host.dll.a")
+    set(YINGLIAN_SDK_RUNTIME_RELEASE "${ROBOT_SDK_ROOT}/yinglian/windows/temp_win_mingw64_v2.0.4/nrc_host.dll")
+    set(YINGLIAN_SDK_RUNTIME_DEBUG "${ROBOT_SDK_ROOT}/yinglian/windows/temp_win_mingw64_debug_v2.0.4/nrc_host.dll")
+    set(YINGLIAN_SDK_IMPORT_LIB_RELEASE "${ROBOT_SDK_ROOT}/yinglian/windows/temp_win_mingw64_v2.0.4/libnrc_host.dll.a")
+    set(YINGLIAN_SDK_IMPORT_LIB_DEBUG "${ROBOT_SDK_ROOT}/yinglian/windows/temp_win_mingw64_debug_v2.0.4/libnrc_host.dll.a")
+    if(NOT EXISTS "${YINGLIAN_SDK_RUNTIME}")
+        message(FATAL_ERROR "Required Yinglian SDK file not found: ${YINGLIAN_SDK_RUNTIME}")
+    endif()
+    if(NOT EXISTS "${YINGLIAN_SDK_IMPORT_LIB}")
+        message(FATAL_ERROR "Required Yinglian SDK import library not found: ${YINGLIAN_SDK_IMPORT_LIB}")
     endif()
 
-    set(ROBOT_SDK_RUNTIME "${ROBOT_SDK_LINUX_DIR}/libnrc_host.so")
-
-    if(NOT EXISTS "${ROBOT_SDK_RUNTIME}")
-        message(FATAL_ERROR "Required Linux SDK file not found: ${ROBOT_SDK_RUNTIME}")
-    endif()
-
-    set_target_properties(robot_sdk PROPERTIES
-        IMPORTED_LOCATION "${ROBOT_SDK_RUNTIME}"
-    )
-
-    set_target_properties(${PROJECT_NAME} PROPERTIES
-        BUILD_RPATH "\$ORIGIN"
-    )
+    target_link_libraries(${PROJECT_NAME} PRIVATE "${HUICHUAN_SDK_IMPORT_LIB}" "${YINGLIAN_SDK_IMPORT_LIB}")
 else()
-    message(FATAL_ERROR "Unsupported platform: ${CMAKE_SYSTEM_NAME}")
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
+        set(YINGLIAN_SDK_LINUX_DIR "${ROBOT_SDK_ROOT}/yinglian/linux/arm64")
+    elseif(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 9)
+        set(YINGLIAN_SDK_LINUX_DIR "${ROBOT_SDK_ROOT}/yinglian/linux/linux_gcc-9_x64_v2.0.4")
+    else()
+        set(YINGLIAN_SDK_LINUX_DIR "${ROBOT_SDK_ROOT}/yinglian/linux/linux_gcc-4_x64_v2.0.4")
+    endif()
+
+    set(YINGLIAN_SDK_RUNTIME "${YINGLIAN_SDK_LINUX_DIR}/libnrc_host.so")
+    if(NOT EXISTS "${YINGLIAN_SDK_RUNTIME}")
+        message(FATAL_ERROR "Required Yinglian Linux SDK file not found: ${YINGLIAN_SDK_RUNTIME}")
+    endif()
+    if(UNIX)
+        target_link_libraries(${PROJECT_NAME} PRIVATE "${YINGLIAN_SDK_RUNTIME}")
+    endif()
 endif()
 
-target_link_libraries(${PROJECT_NAME} PRIVATE robot_sdk)
+if(WIN32)
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${HUICHUAN_SDK_RUNTIME}"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/IMC100API.dll"
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/robot_sdk/yinglian/windows/temp_win_mingw64_v2.0.4"
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/robot_sdk/yinglian/windows/temp_win_mingw64_debug_v2.0.4"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${YINGLIAN_SDK_RUNTIME_RELEASE}"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/robot_sdk/yinglian/windows/temp_win_mingw64_v2.0.4/nrc_host.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${YINGLIAN_SDK_RUNTIME_DEBUG}"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/robot_sdk/yinglian/windows/temp_win_mingw64_debug_v2.0.4/nrc_host.dll"
+        VERBATIM
+    )
+else()
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/robot_sdk/yinglian/linux/linux_gcc-9_x64_v2.0.4"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${YINGLIAN_SDK_RUNTIME}"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/robot_sdk/yinglian/linux/linux_gcc-9_x64_v2.0.4/libnrc_host.so"
+        VERBATIM
+    )
+endif()
 
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${ROBOT_SDK_RUNTIME}"
-        "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
-    VERBATIM
-)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/robot_connection_huichuan.ini")
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/robot_connection_huichuan.ini"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/robot_connection_huichuan.ini"
+        VERBATIM
+    )
+endif()
 
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/calib_scripts")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/robot_connection_yinglian.ini")
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/robot_connection_yinglian.ini"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/robot_connection_yinglian.ini"
+        VERBATIM
+    )
+endif()
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/model")
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${CMAKE_CURRENT_SOURCE_DIR}/calib_scripts"
-            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/calib_scripts"
+            "${CMAKE_CURRENT_SOURCE_DIR}/model"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/model"
         VERBATIM
     )
 endif()

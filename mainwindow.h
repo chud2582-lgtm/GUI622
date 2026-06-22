@@ -9,24 +9,18 @@
 #include <QMainWindow>
 #include <QProgressBar>
 #include <QPushButton>
-#include <QSlider>
 #include <QSpinBox>
-#include <QSplitter>
-#include <QStatusBar>
-#include <QTabWidget>
 #include <QTableWidget>
 #include <QTextEdit>
 #include <QTimer>
-#include <QVector3D>
 
+#include <vector>
 
-#include <array>
+#include "robot_sdk/cpp/parameter/nrc_define.h"
+#include "robot_sdk/cpp/robot_adapter.h"
 
-#include "cpp/parameter/nrc_define.h"
-#include "cpp/parameter/nrc_interface_parameter.h"
-
-class RobotPreviewWidget;
-class AutoCalibrationWidget;
+class WorkpieceSelectionWidget;
+class QThread;
 
 class MainWindow : public QMainWindow
 {
@@ -46,26 +40,11 @@ private slots:
     void onClearError();
 
     void onModeChanged(int index);
-    void onCoordChanged(int index);
 
-    void onSpeedSliderChanged(int value);
-    void onSpeedApply();
-
-    void onJogStart();
-    void onJogStop();
-
-    void onMoveJ();
-    void onMoveL();
-    void onGoHome();
-    void onGoReset();
-
-    void onJobRun();
-    void onJobPause();
-    void onJobContinue();
-    void onJobStop();
-    void onJobCreate();
-    void onJobOpen();
-    void onJobDelete();
+    void onTopJobStart();
+    void onTopJobPauseContinue();
+    void onTopJobStop();
+    void onTopJobReset();
 
     void onSetDigitalOutput();
     void onRefreshIO();
@@ -75,33 +54,25 @@ private slots:
     void onToggleWindGrinder();
 
     void onTimerUpdate();
-    void onPreviewFrame();
-    void onClearPreviewTrace();
 
 private:
-    enum class PreviewMotionMode {
-        None,
-        JointTarget,
-        LinearTarget
-    };
-
     void setupUI();
     void setupStyleSheet();
 
     QWidget* createConnectionPanel();
     QWidget* createServoPanel();
-    QWidget* createPositionPanel();
-    QWidget* createPreviewPanel();
-    QWidget* createJogPanel();
-    QWidget* createMotionPanel();
-    QWidget* createJobPanel();
     QWidget* createIOPanel();
     QWidget* createGlobalVariantPanel();
-    QWidget* createAutoCalibrationPanel();
-    void notifyAutoCalibConnection();
-    void notifyAutoCalibPose();
+    QWidget* createWorkpieceSelectionPanel();
+    QWidget* createTcpPosePanel();
     void applyGlobalVariantInputType();
     void refreshGlobalVariantModeLabel();
+    bool currentGlobalVariantName(QString& nameOut) const;
+    void loadConnectionSettings();
+    void saveConnectionSettings() const;
+    QString connectionBrandText() const;
+    void applySelectedRobotBrand();
+    RobotBrand selectedRobotBrand() const;
 
     QPushButton* createStyledButton(const QString& text, const QString& styleClass = QString());
     QGroupBox* createStyledGroup(const QString& title);
@@ -109,76 +80,40 @@ private:
     void appendLog(const QString& msg);
     void stopTimers();
     void setConnectionUi(bool connected);
+    void setConnectionInProgress(bool inProgress);
+    void finishConnect(const QString& ip, const QString& port, SOCKETFD socketFd, qint64 elapsedMs,
+                       const QString& failureDetail, const QString& tcpProbeDetail,
+                       const QString& detectedBrand);
     void updateConnectionStatusLabel(const QString& text, bool connectedStyle);
-    void refreshPositionHeaders();
-    void refreshPositionDisplay();
-    void refreshPreview(bool appendTrace = true);
-    void refreshJobStatus();
     void refreshStatusSummary();
-    void resetDemoState();
-    void updateCartesianFromJointState();
-    void updateJointFromCartesianState();
-    void startJointAnimation(const std::array<double, 7>& joints, int velocityPercent);
-    void startLinearAnimation(const std::array<double, 7>& cartesianPose, int velocity);
-    void stepDemoMotion();
+    void refreshTcpPoseLabels();
+    void updateTopJobButtons();
+    void setTopJobStatus(const QString& status, bool paused);
     bool ensureJobControllerReady(const QString& actionName);
     bool pollRobotState();
-    MoveCmd buildMoveCommand() const;
     QString normalizedJobName() const;
     QString resultToString(Result result) const;
     QString robotTypeName(int type) const;
-    std::array<double, 7> targetPoseFromInputs() const;
-    static QVector3D poseToVector3D(const std::array<double, 7>& pose);
 
-    QLineEdit* m_ipEdit = nullptr;
-    QLineEdit* m_portEdit = nullptr;
+    QLabel* m_connectionEndpointLabel = nullptr;
+    QLabel* m_brandLabel = nullptr;
     QPushButton* m_connectBtn = nullptr;
     QPushButton* m_disconnectBtn = nullptr;
+    QProgressBar* m_connProgress = nullptr;
     QLabel* m_connStatusLabel = nullptr;
 
-    QPushButton* m_servoReadyBtn = nullptr;
-    QPushButton* m_powerOnBtn = nullptr;
-    QPushButton* m_powerOffBtn = nullptr;
-    QPushButton* m_clearErrorBtn = nullptr;
+    QPushButton* m_topJobStartBtn = nullptr;
+    QPushButton* m_topJobPauseContinueBtn = nullptr;
+    QPushButton* m_topJobStopBtn = nullptr;
+    QPushButton* m_topJobResetBtn = nullptr;
+    QPushButton* m_servoPowerOnBtn = nullptr;
+    QLabel* m_topJobStatusLabel = nullptr;
     QLabel* m_servoStatusLabel = nullptr;
 
     QComboBox* m_modeCombo = nullptr;
-    QComboBox* m_coordCombo = nullptr;
 
-    QSlider* m_speedSlider = nullptr;
-    QSpinBox* m_speedSpin = nullptr;
-    QPushButton* m_speedApplyBtn = nullptr;
-
-    QLabel* m_posLabels[7] = {};
-    QLabel* m_posHeaderLabels[7] = {};
-
-    RobotPreviewWidget* m_robotPreview = nullptr;
-    QLabel* m_previewPoseLabel = nullptr;
-    QPushButton* m_clearTraceBtn = nullptr;
-
-    QPushButton* m_jogPosBtn[7] = {};
-    QPushButton* m_jogNegBtn[7] = {};
-
-    QDoubleSpinBox* m_targetPos[7] = {};
-    QSpinBox* m_moveVelSpin = nullptr;
-    QSpinBox* m_moveAccSpin = nullptr;
-    QSpinBox* m_moveDecSpin = nullptr;
-    QPushButton* m_moveJBtn = nullptr;
-    QPushButton* m_moveLBtn = nullptr;
-    QPushButton* m_goHomeBtn = nullptr;
-    QPushButton* m_goResetBtn = nullptr;
-
+    QLineEdit* m_workpieceIdEdit = nullptr;
     QLineEdit* m_jobNameEdit = nullptr;
-    QPushButton* m_jobRunBtn = nullptr;
-    QPushButton* m_jobPauseBtn = nullptr;
-    QPushButton* m_jobContinueBtn = nullptr;
-    QPushButton* m_jobStopBtn = nullptr;
-    QPushButton* m_jobCreateBtn = nullptr;
-    QPushButton* m_jobOpenBtn = nullptr;
-    QPushButton* m_jobDeleteBtn = nullptr;
-    QSpinBox* m_jobRunTimesSpin = nullptr;
-    QLabel* m_jobCurrentLabel = nullptr;
-    QLabel* m_jobLineLabel = nullptr;
 
     QSpinBox* m_doPortSpin = nullptr;
     QComboBox* m_doValueCombo = nullptr;
@@ -198,33 +133,32 @@ private:
     QPushButton* m_windGrinderBtn = nullptr;
     bool m_windGrinderOn = false;
 
-    AutoCalibrationWidget* m_autoCalib = nullptr;
+    WorkpieceSelectionWidget* m_workpieceSelection = nullptr;
 
     QLabel* m_robotRunStateLabel = nullptr;
     QLabel* m_robotTypeLabel = nullptr;
-    QProgressBar* m_connProgress = nullptr;
+    QLabel* m_tcpPoseValueLabels[6] = {};
     QTextEdit* m_logEdit = nullptr;
 
     QTimer* m_updateTimer = nullptr;
-    QTimer* m_previewTimer = nullptr;
+    QThread* m_connectThread = nullptr;
 
+    QString m_robotIp;
+    QString m_robotPort;
+    QString m_robotBrand;
+    QString m_lastSuccessfulBrand;
     SOCKETFD m_socketFd = -1;
     bool m_connected = false;
-    bool m_demoMode = false;
-
-    std::array<double, 7> m_jointPose = {};
-    std::array<double, 7> m_cartesianPose = {};
-    std::array<double, 7> m_jointTargetPose = {};
-    std::array<double, 7> m_cartesianTargetPose = {};
-
-    PreviewMotionMode m_previewMotionMode = PreviewMotionMode::None;
-    int m_motionVelocity = 30;
-    int m_activeJogAxis = -1;
-    int m_activeJogDirection = 0;
+    bool m_connecting = false;
+    bool m_workpieceSelected = false;
+    bool m_topJobPaused = false;
 
     int m_servoState = 0;
     int m_runState = 0;
     int m_robotType = 12;
+    int m_pollFailCount = 0;
+    int m_pollSequence = 0;
+    std::vector<double> m_tcpPose;
 };
 
 #endif // MAINWINDOW_H
